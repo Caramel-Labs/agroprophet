@@ -4,6 +4,8 @@ from settings import DB_PATH
 from routes.data import router as data_router
 from fastapi.middleware.cors import CORSMiddleware
 from routes.prediction import router as prediction_router
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 
 # ***************************************
 #              APPLICATION
@@ -15,6 +17,8 @@ app = FastAPI(
     title="AgroProphet",
     description="AgroProphet - Cold Storage Solution.",
 )
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Bind routers to main application
 app.include_router(
@@ -95,12 +99,11 @@ app.add_middleware(
 # ***************************************
 
 
-@app.get("/", tags=["Internals"])
-async def root():
-    return {
-        "message": "AgroProphet is up and running! Navigate to /docs to view the SwaggerUI.",
-    }
+@app.get("/", response_class=HTMLResponse)
+async def read_root():
 
+    with open("static/index.html") as f:
+        return f.read()
 
 # NOTE
 # Other routes can be found in the `routes` folder

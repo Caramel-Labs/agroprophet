@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgroProphet - Harveston Crop Price Predictions</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #00e5ff;
+            --primary-light: #18ffff;
+            --primary-dark: #0097a7;
+            --secondary: #7c4dff;
+            --text: #e0f7fa;
+            --background: #031019;
+            --card: #0d2632;
+            --accent: #ff4081;
+            --border: #01579b;
+            --highlight: #00bcd4;
+            --dark-panel: #01223d;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Orbitron', 'Rajdhani', sans-serif;
+        }
+        
+        body {
+            background-color: var(--background);
+            color: var(--text);
+            line-height: 1.6;
+            background-image: 
+                radial-gradient(circle at 50% 50%, rgba(1, 87, 155, 0.3) 0%, transparent 60%),
+                linear-gradient(to right, rgba(0, 229, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 229, 255, 0.05) 1px, transparent 1px);
+            background-size: 100% 100%, 20px 20px, 20px 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background-color: var(--dark-panel);
+            color: var(--text);
+            padding: 20px 0;
+            box-shadow: 0 2px 20px rgba(0, 229, 255, 0.2);
+            position: relative;
+            border-bottom: 1px solid var(--primary);
+        }
+        
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+        }
+        
+        .logo h1 {
+            font-size: 2rem;
+            margin: 0;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+            letter-spacing: 2px;
+        }
+        
+        .logo-icon {
+            font-size: 2.5rem;
+            position: relative;
+            filter: drop-shadow(0 0 5px var(--primary));
+        }
+        
+        .tagline {
+            font-style: italic;
+            opacity: 0.8;
+            font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 1px;
+        }
+        
+        .controls {
+            background-color: var(--card);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 229, 255, 0.1);
+            margin: 30px 0;
+            border: 1px solid var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .controls::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(to right, transparent, var(--primary), transparent);
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+            color: var(--primary);
+            letter-spacing: 1px;
+        }
+        
+        .section-subtitle {
+            color: var(--text);
+            opacity: 0.7;
+            margin-bottom: 20px;
+            font-family: 'Rajdhani', sans-serif;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: flex-end;
+            position: relative;
+        }
+        
+        .input-group {
+            flex: 1;
+            min-width: 200px;
+            position: relative;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--primary);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+        }
+        
+        select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 1rem;
+            background-color: rgba(13, 38, 50, 0.8);
+            color: var(--text);
+            outline: none;
+            transition: all 0.3s;
+            font-family: 'Rajdhani', sans-serif;
+            box-shadow: 0 0 5px rgba(0, 229, 255, 0.2);
+        }
+        
+        select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+        }
+        
+        button {
+            background: linear-gradient(45deg, var(--primary-dark), var(--primary));
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(0, 229, 255, 0.3);
+        }
+        
+        button::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: rgba(255, 255, 255, 0.1);
+            transform: rotate(45deg);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        button:hover {
+            background: linear-gradient(45deg, var(--primary), var(--primary-light));
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 229, 255, 0.4);
+        }
+        
+        button:hover::before {
+            opacity: 1;
+            animation: shine 1.5s;
+        }
+        
+        @keyframes shine {
+            from {
+                left: -50%;
+                opacity: 0.7;
+            }
+            to {
+                left: 120%;
+                opacity: 0;
+            }
+        }
+        
+        .results {
+            background-color: var(--card);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 229, 255, 0.1);
+            margin-top: 30px;
+            display: none;
+            border: 1px solid var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .results::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(to right, transparent, var(--secondary), transparent);
+        }
+        
+        .results.active {
+            display: block;
+        }
+        
+        .result-header {
+            border-bottom: 2px solid var(--secondary);
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+            color: var(--primary);
+        }
+        
+        .prediction-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: space-between;
+        }
+        
+        .prediction-card {
+            flex: 1;
+            min-width: 220px;
+            background-color: rgba(1, 34, 61, 0.8);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s;
+            border: 1px solid var(--border);
+            position: relative;
+        }
+        
+        .prediction-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--accent);
+            opacity: 0.8;
+        }
+        
+        .prediction-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 229, 255, 0.2);
+            border-color: var(--primary);
+        }
+        
+        .card-header {
+            background: linear-gradient(45deg, var(--primary-dark), var(--secondary));
+            color: var(--text);
+            padding: 12px;
+            font-weight: 600;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.9rem;
+        }
+        
+        .card-header::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.1), transparent);
+            animation: scanline 2s infinite;
+        }
+        
+        @keyframes scanline {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .card-body {
+            padding: 20px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .price {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin: 15px 0;
+            text-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+            position: relative;
+        }
+        
+        .price::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 50px;
+            height: 2px;
+            background: linear-gradient(to right, transparent, var(--primary), transparent);
+        }
+        
+        .date {
+            color: #b0bec5;
+            font-size: 0.9rem;
+            font-family: 'Rajdhani', sans-serif;
+            margin-bottom: 10px;
+        }
+        
+        .unit {
+            color: #b0bec5;
+            font-size: 0.85rem;
+            font-family: 'Rajdhani', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .loading.active {
+            display: block;
+        }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 20px;
+            position: relative;
+        }
+        
+        .spinner::before, .spinner::after {
+            content: '';
+            position: absolute;
+            border-radius: 50%;
+            border: 4px solid transparent;
+            border-top-color: var(--primary);
+            width: 100%;
+            height: 100%;
+            animation: spinnerOne 1.5s linear infinite;
+        }
+        
+        .spinner::after {
+            border: 4px solid transparent;
+            border-bottom-color: var(--secondary);
+            animation: spinnerTwo 1.5s linear infinite;
+        }
+        
+        @keyframes spinnerOne {
+            0% { transform: rotate(0deg); border-width: 4px; }
+            50% { transform: rotate(180deg); border-width: 1px; }
+            100% { transform: rotate(360deg); border-width: 4px; }
+        }
+        
+        @keyframes spinnerTwo {
+            0% { transform: rotate(0deg); border-width: 1px; }
+            50% { transform: rotate(180deg); border-width: 4px; }
+            100% { transform: rotate(360deg); border-width: 1px; }
+        }
+        
+        .loading-text {
+            color: var(--primary);
+            font-family: 'Rajdhani', sans-serif;
+            letter-spacing: 2px;
+            position: relative;
+        }
+        
+        .loading-text::after {
+            content: '...';
+            position: absolute;
+            animation: dots 1.5s infinite;
+        }
+        
+        @keyframes dots {
+            0% { content: '.'; }
+            33% { content: '..'; }
+            66% { content: '...'; }
+            100% { content: '.'; }
+        }
+        
+        .error-message {
+            background-color: rgba(198, 40, 40, 0.1);
+            color: #ff5252;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+            border: 1px solid #c62828;
+            box-shadow: 0 4px 15px rgba(198, 40, 40, 0.2);
+        }
+        
+        .error-message.active {
+            display: block;
+        }
+        
+        footer {
+            margin-top: 60px;
+            text-align: center;
+            padding: 20px;
+            color: #78909c;
+            border-top: 1px solid var(--border);
+            font-family: 'Rajdhani', sans-serif;
+            position: relative;
+        }
+        
+        footer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(to right, transparent, var(--primary), transparent);
+        }
+        
+        /* Futuristic scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            background-color: var(--background);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(var(--primary), var(--secondary));
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background-color: var(--dark-panel);
+            border-radius: 4px;
+        }
+        
+        /* Responsive styles */
+        @media (max-width: 768px) {
+            .form-group {
+                flex-direction: column;
+            }
+            
+            .input-group {
+                width: 100%;
+            }
+            
+            .prediction-card {
+                min-width: 100%;
+            }
+            
+            .logo h1 {
+                font-size: 1.5rem;
+            }
+            
+            .logo-icon {
+                font-size: 2rem;
+            }
+        }
+        
+        /* Hover effects for select options */
+        select option:hover, select option:focus {
+            background-color: var(--primary-dark);
+            color: white;
+        }
+        
+        /* Add a soft glow effect to the interface */
+        .card-header, .price, button, .logo h1 {
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">🌾</span>
+                    <h1>AgroProphet</h1>
+                </div>
+                <p class="tagline">"It ain't much, but it's honest work"</p>
+            </div>
+        </div>
+    </header>
+    
+    <main class="container">
+        <div class="controls">
+            <h2 class="section-title">Select Crop and Region</h2>
+            <p class="section-subtitle">View price predictions for the next 4 weeks</p>
+            <div class="form-group">
+                <div class="input-group">
+                    <label for="crop">Crop</label>
+                    <select id="crop">
+                        <option value="">Select a crop</option>
+                        <!-- Crops will be populated dynamically -->
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="region">Kingdom</label>
+                    <select id="region">
+                        <option value="">Select a kingdom</option>
+                        <!-- Regions will be populated dynamically -->
+                    </select>
+                </div>
+                <button id="predict-btn">Get Predictions</button>
+            </div>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p class="loading-text">Loading predictions</p>
+        </div>
+        
+        <div class="error-message" id="error-message">
+            <p>Unable to fetch predictions. Please try again later.</p>
+        </div>
+        
+        <div class="results" id="results">
+            <div class="result-header">
+                <h2 id="result-title">Price Predictions</h2>
+                <p id="result-subtitle">Showing predictions for the next 4 weeks</p>
+            </div>
+            <div class="prediction-cards" id="prediction-cards">
+                <!-- Prediction cards will be added here dynamically -->
+            </div>
+        </div>
+    </main>
+    
+    <footer>
+        <div class="container">
+            <p>&copy; 2043 AgroProphet | Harveston Agricultural Prediction System </p>
+        </div>
+    </footer>
+    
+    <script>
+        // Correct crop and kingdom data for Harveston
+        const crops = [
+            'Plantain', 'Loquat', 'Cantaloupe', 'Snow Peas', 'Bottle Gourd', 
+            'White Eggplant', 'Thai Eggplant', 'Watercress', 'Starfruit', 'Bael Fruit', 
+            'Amaranth Leaves', 'Indian Gooseberry (Amla)', 'Spring Onion', 'Dragon Fruit', 'Pulasan', 
+            'Feijoa', 'Gotu Kola', 'Parsnip', 'Langsat', 'Sapodilla', 
+            'Napa Cabbage', 'Turnip', 'Rutabaga', 'Breadnut', 'Butternut Squash', 
+            'Shallot', 'Sweet Potato', 'Cherimoya', 'Atemoya', 'Red Currant', 
+            'Tangerine', 'Cranberry', 'Durian', 'Green Banana', 'Okra', 
+            'Cassava', 'Yam'
+        ];
+        
+        const regions = [
+            'Mystic Falls', 'Olympus', 'Metropolis', 'Arcadia', 'Elysium', 
+            'Shangri-La', 'Valhalla', 'Eldoria', 'El Dorado', 'Zion', 
+            'Pandora', 'Asgard', 'Wakanda', 'Avalon', 'Camelot', 
+            'Starling City', 'Dragonstone', 'Emerald City', 'Narnia', 'Rivendell', 
+            'Gotham', 'Atlantis', 'Neverland', 'Hogsmeade', 'Winterfell'
+        ];
+        
+        // DOM elements
+        const cropSelect = document.getElementById('crop');
+        const regionSelect = document.getElementById('region');
+        const predictBtn = document.getElementById('predict-btn');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const resultTitle = document.getElementById('result-title');
+        const resultSubtitle = document.getElementById('result-subtitle');
+        const predictionCards = document.getElementById('prediction-cards');
+        const errorMessage = document.getElementById('error-message');
+        
+        // Populate dropdowns
+        crops.forEach(crop => {
+            const option = document.createElement('option');
+            option.value = crop;
+            option.textContent = crop;
+            cropSelect.appendChild(option);
+        });
+        
+        regions.forEach(region => {
+            const option = document.createElement('option');
+            option.value = region;
+            option.textContent = region;
+            regionSelect.appendChild(option);
+        });
+        
+        // Event listeners
+        predictBtn.addEventListener('click', getPredictions);
+        
+        async function getPredictions() {
+            const crop = cropSelect.value;
+            const region = regionSelect.value;
+            
+            if (!crop || !region) {
+                alert('Please select both a crop and a kingdom');
+                return;
+            }
+            
+            // Show loading, hide results and error
+            loading.classList.add('active');
+            results.classList.remove('active');
+            errorMessage.classList.remove('active');
+            
+            try {
+                // Create the payload for the POST request
+                const payload = {
+                    crop: crop,
+                    region: region
+                };
+                
+                const response = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                
+            
+                displayResults(data);
+            } catch (error) {
+                console.error('Error fetching predictions:', error);
+                errorMessage.classList.add('active');
+            } finally {
+                loading.classList.remove('active');
+            }
+        }
+        
+        function displayResults(data) {
+            // Update result header
+            resultTitle.textContent = `${data.crop} Prices in ${data.region}`;
+            resultSubtitle.textContent = `Predictions for the next 4 weeks`;
+            
+            // Clear previous cards
+            predictionCards.innerHTML = '';
+            
+            // Create prediction cards
+            data.predictions.forEach(prediction => {
+                const card = document.createElement('div');
+                card.className = 'prediction-card';
+                
+                // Format date
+                const date = new Date(prediction.date);
+                const formattedDate = date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+                
+                // Week label
+                const weekLabels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+                const weekLabel = weekLabels[prediction.prediction_index];
+                
+                card.innerHTML = `
+                    <div class="card-header">${weekLabel}</div>
+                    <div class="card-body">
+                        <div class="date">${formattedDate}</div>
+                        <div class="price">${prediction.price}</div>
+                        <div class="unit">Silver drachmas/kg</div>
+                    </div>
+                `;
+                
+                predictionCards.appendChild(card);
+            });
+            
+            // Show results
+            results.classList.add('active');
+        }
+        
+        // Function to connect to the real API
+        // This would replace the simulated data in the getPredictions function
+        async function fetchPredictions(crop, region) {
+            try {
+                const payload = {
+                    crop: crop,
+                    region: region
+                };
+                
+                const response = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching predictions:', error);
+                throw error;
+            }
+        }
+    </script>
+</body>
+</html>
