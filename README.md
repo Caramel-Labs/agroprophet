@@ -2,6 +2,43 @@
 
 Predict the future of your harvest!
 
+## Project Structure 🌲
+
+AgroProphet's codebase and system architecture is portrayed in the following structure:
+
+
+```sh
+.
+├── img                            # Images used in documentation
+│   └── swagger.png               # Screenshot of the SwaggerUI interface
+├── models                         # Serialized XGBoost models for each region and crop type
+│   ├── Arcadia__Fruit.joblib     # Example model: Arcadia region - Fruit prices
+│   ├── Arcadia__Vegetable.joblib
+│   ├── ...                       # (Other similar region/crop models)
+│   └── Zion__Vegetable.joblib
+├── notebooks                      # Jupyter notebooks
+│   └── AgroProphet.ipynb         # Final training and serialization notebook
+├── payloads                       # Pydantic schemas for request validation
+│   ├── __init__.py               # Init file for payloads module
+│   ├── prediction.py             # Schema for price prediction requests
+│   ├── price.py                  # Schema for incoming price data
+│   └── weather.py                # Schema for incoming weather data
+├── routes                         # FastAPI route definitions
+│   ├── data.py                   # Handles new data submission
+│   ├── __init__.py               # Init file for routes module
+│   └── prediction.py             # Handles prediction requests
+├── static                         # Static files served with the API
+│   └── index.html                # Basic HTML UI placeholder or landing page
+├── agroprophet.db                 # SQLite database storing historical and predicted prices
+├── Dockerfile                     # Dockerfile
+├── LICENSE                        # Project license file
+├── main.py                        # FastAPI app entry point
+├── README.md                      # Project overview, setup instructions, and usage guide
+├── requirements.txt               # List of Python dependencies
+└── settings.py                    # Configuration file
+
+```
+
 ## Setup (Manual) ⚙️
 
 AgroProphet has very few prerequisites, which are probably already installed on your system:
@@ -13,27 +50,20 @@ To run AgroProphet locally on your machine, follow these steps:
 
 ### 1. Clone Project
 
-Clone the project to a desired location (folder) on your machine by opening up a terminal from the folder and entering the following command:
 
 ```shell
 git clone https://github.com/Caramel-Labs/agroprophet.git
-```
-
-Next, move into the `agroprophet` project directory:
-
-```shell
 cd agroprophet
 ```
 
 ### 2. Activate Virtual Environment
 
-A virtual environment will help you keep AgroProphet's dependencies isolated from the global system of Python packages. To setup your virtual environment, first ensure that `virtualenv` is installed on your system:
 
 ```shell
 pip install virtualenv
 ```
 
-To create and activate a virtual environment, enter the following commands after moving into the `agroprophet` folder as done in the previous step:
+To create and activate a virtual environment, enter the following commands after moving into the `agroprophet` folder as done previously:
 
 ```shell
 # Create a virtual environment named 'env':
@@ -44,16 +74,6 @@ env\Scripts\activate.bat
 
 # Activate the virtual environment (MacOS / Linux):
 source env/bin/activate
-```
-
-Your terminal will now include an `(env)` prefix, indicating a successful activation of the virtual environment:
-
-```shell
-# On Windows:
-(env) drive:\folder\...agroprophet>
-
-# On MacOS and Linux
-(env) user@computer:~/...agroprophet$
 ```
 
 To deactivate the virtual environment (and remove the `(env)` prefix):
@@ -70,11 +90,8 @@ After activating the virtual environment, you can install the necessary dependen
 pip install -r requirements.txt
 ```
 
-[`requirements.txt`](https://github.com/Caramel-Labs/agroprophet/blob/main/requirements.txt) includes all of the project's dependencies and their respective versions.
-
 ### 4. Start FastAPI App
 
-Start up the FastAPI server:
 
 ```shell
 fastapi dev main.py
@@ -84,6 +101,75 @@ FastAPI will then serve AgroProphet on [http://localhost:8000](http://localhost:
 
 ![](img/swagger.png)
 
+## Setup (via DockerHub) 🐳
+
+AgroProphet is available as a Docker image on DockerHub, so you can skip installing Python or dependencies manually. You'll only need to have Docker installed.
+
+### Prerequisites
+
+- [Docker](https://www.docker.com/products/docker-desktop/) (Ensure it's running)
+
+### 1. Pull the Docker Image
+
+```bash
+docker pull caramelabs/agroprophet:latest
+```
+
+### 2. Run the Docker Container
+
+```bash
+docker run -d -p 8000:8000 caramelabs/agroprophet:latest
+```
+
+This runs the app in detached mode (`-d`). You’ll then be able to access the app via:
+
+- [http://localhost:8000](http://localhost:8000)  
+- [http://localhost:8000/docs](http://localhost:8000/docs)
+
+To stop the container, find the container ID:
+
+```bash
+docker ps
+```
+
+Then stop it:
+
+```bash
+docker stop <container_id>
+```
+
 ---
 
-Made with ❤️ by Ravindu Aratchige
+## Setup (Build Locally with Dockerfile) 🛠️
+
+If you prefer to build the image yourself from source, use the included Dockerfile.
+
+### 1. Clone the Repo
+
+```bash
+git clone https://github.com/Caramel-Labs/agroprophet.git
+cd agroprophet
+```
+
+### 2. Build the Docker Image
+
+```bash
+docker build -t agroprophet .
+```
+
+This builds a local image named `agroprophet` using the `Dockerfile` in the project root.
+
+### 3. Run the Container
+
+```bash
+docker run -d -p 8000:8000 agroprophet
+```
+
+You’ll then be able to access the app via:
+
+- [http://localhost:8000](http://localhost:8000)  
+- [http://localhost:8000/docs](http://localhost:8000/docs)
+
+---
+
+Made with ❤️ by Caramel Labs
