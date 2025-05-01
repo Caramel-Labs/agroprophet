@@ -25,6 +25,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./deployment
+          file: ./deployment/Dockerfile
           push: true
           tags: caramellabs/agroprophet:latest
