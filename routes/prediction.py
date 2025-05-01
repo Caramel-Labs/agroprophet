@@ -66,11 +66,11 @@ def predict_prices(data: PricePredictionPayload):
 
     model_data = joblib.load(model_path)
     model = model_data["model"]
-    le: LabelEncoder = model_data["label_encoder"]
+    encoder: LabelEncoder = model_data["label_encoder"]
 
     # Encode commodity
     try:
-        commodity_enc = le.transform([data.commodity])[0]
+        commodity_enc = encoder.transform([data.commodity])[0]
     except ValueError:
         raise HTTPException(status_code=400, detail="Unknown commodity.")
 
