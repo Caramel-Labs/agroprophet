@@ -4,6 +4,8 @@ Predict the future of your harvest!
 
 ![](img/screenshot.png)
 
+_Note_ - the original research done for this project can be found [here](https://colab.research.google.com/drive/1hJOijEQfI1Yy89OVuhuAWY_OVbrR2t_P?usp=sharing).
+
 ## Project Structure 🌲
 
 AgroProphet's codebase is portrayed in the following structure:
