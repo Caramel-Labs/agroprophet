@@ -11,7 +11,7 @@ AgroProphet's codebase and system architecture is portrayed in the following str
 .
 ├── img                            # Images used in documentation
 │   └── swagger.png               # Screenshot of the SwaggerUI interface
-├── models                         # Serialized XGBoost models for each region and crop type
+├── models                         # Serialized XGBoost models
 │   ├── Arcadia__Fruit.joblib     # Example model: Arcadia region - Fruit prices
 │   ├── Arcadia__Vegetable.joblib
 │   ├── ...                       # (Other similar region/crop models)
@@ -29,7 +29,7 @@ AgroProphet's codebase and system architecture is portrayed in the following str
 │   └── prediction.py             # Handles prediction requests
 ├── static                         # Static files served with the API
 │   └── index.html                # Basic HTML UI placeholder or landing page
-├── agroprophet.db                 # SQLite database storing historical and predicted prices
+├── agroprophet.db                 # SQLite database of the system
 ├── Dockerfile                     # Dockerfile
 ├── LICENSE                        # Project license file
 ├── main.py                        # FastAPI app entry point
