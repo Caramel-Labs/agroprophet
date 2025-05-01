@@ -1,25 +1,35 @@
-import os
-import joblib
 import sqlite3
-import numpy as np
-from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException
-from sklearn.calibration import LabelEncoder
+from fastapi import FastAPI
+from settings import DB_PATH
+from routes.price import router as data_router
 from fastapi.middleware.cors import CORSMiddleware
+from routes.prediction import router as prediction_router
 
-# Instantiate FastAPI application
+# ***************************************
+#              APPLICATION
+# ***************************************
+
+
+# Instantiate main application
 app = FastAPI(
     title="AgroProphet",
     description="AgroProphet - Cold Storage Solution.",
 )
 
-# SQLite DB setup
-db_path = "agroprophet.db"
+# Bind routers to main application
+app.include_router(data_router)
+app.include_router(prediction_router)
+
+
+# ***************************************
+#               DATABASE
+# ***************************************
 
 
 def init_db():
-    with sqlite3.connect(db_path) as conn:
+    with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
+        # Create price table
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS price (
@@ -31,21 +41,28 @@ def init_db():
             )
         """
         )
+        # Create weather table
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS weather (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                region TEXT NOT NULL,
+                rainfall REAL,
+                humidity REAL,
+                temp REAL
+            )
+        """
+        )
         conn.commit()
 
 
-# Call this once at startup
 init_db()
 
-# Define directory with saved models
-model_dir = "models"
 
-
-class CommodityInput(BaseModel):
-    region: str
-    type: str
-    commodity: str
-    last_4_week_prices: list[float]  # [lag_1, lag_2, lag_3, lag_4]
+# ***************************************
+#              CORS CONFIG
+# ***************************************
 
 
 # Define allowed origins for CORS
@@ -67,7 +84,11 @@ app.add_middleware(
 )
 
 
-# Root route (to test service health)
+# ***************************************
+#               ROUTES
+# ***************************************
+
+
 @app.get("/", tags=["Internals"])
 async def root():
     return {
@@ -75,60 +96,5 @@ async def root():
     }
 
 
-@app.post("/predict")
-def predict_prices(data: CommodityInput):
-    model_path = os.path.join(
-        model_dir, f"{data.region}__{data.type}.joblib".replace(" ", "_")
-    )
-
-    if not os.path.exists(model_path):
-        raise HTTPException(
-            status_code=404,
-            detail="Model not found for given region and type.",
-        )
-
-    model_data = joblib.load(model_path)
-    model = model_data["model"]
-    le: LabelEncoder = model_data["label_encoder"]
-
-    try:
-        commodity_enc = le.transform([data.commodity])[0]
-
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail="Unknown commodity.",
-        )
-
-    X_input = np.array([[commodity_enc] + data.last_4_week_prices])
-    y_pred = model.predict(X_input)[0].tolist()
-
-    return {
-        "commodity": data.commodity,
-        "region": data.region,
-        "type": data.type,
-        "predicted_prices_next_4_weeks": y_pred,
-    }
-
-
-@app.post("/api/data/prices", tags=["Data Collection"])
-def store_price_data(payload: dict):
-    # Validate required fields
-    try:
-        date = payload["date"]
-        region = payload["region"]
-        crop = payload["crop"]
-        price = payload["priceData"]["price"]
-    except KeyError:
-        raise HTTPException(status_code=400, detail="Missing required fields.")
-
-    # Store in SQLite DB
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO price (date, region, crop, price) VALUES (?, ?, ?, ?)",
-            (date, region, crop, price),
-        )
-        conn.commit()
-
-    return {"message": "Price data saved successfully."}
+# NOTE
+# Other routes can be found in the `routes` folder
