@@ -34,13 +34,13 @@ def predict_prices(data: PredictionPayload):
             detail="Unknown crop; not categorized as Fruit or Vegetable.",
         )
 
-    # 2. Retrieve last 4 prices
+    # 2. Retrieve last 4 actual prices
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
             SELECT date, price FROM price
-            WHERE region = ? AND crop = ?
+            WHERE region = ? AND crop = ? AND actual = 1
             ORDER BY date DESC
             LIMIT 4
             """,
@@ -51,7 +51,7 @@ def predict_prices(data: PredictionPayload):
     if len(rows) < 4:
         raise HTTPException(
             status_code=400,
-            detail="Not enough historical data to make a prediction (need at least 4 weeks of price data).",
+            detail="Not enough historical data to make a prediction (need at least 4 weeks of actual price data).",
         )
 
     # 3. Sort and prepare lag values
@@ -85,15 +85,34 @@ def predict_prices(data: PredictionPayload):
     y_pred = model.predict(X_input)[0].tolist()
 
     # 7. Build prediction output with future dates
-    prediction_output = [
-        {
-            "prediction_index": i,
-            "date": (latest_date + timedelta(weeks=i + 1)).strftime("%Y-%m-%d"),
-            "price": round(price, 2),
-        }
-        for i, price in enumerate(y_pred)
-    ]
+    prediction_output = []
+    future_entries = []
+    for i, price in enumerate(y_pred):
+        future_date = (latest_date + timedelta(weeks=i + 1)).strftime("%Y-%m-%d")
+        prediction_output.append(
+            {
+                "prediction_index": i,
+                "date": future_date,
+                "price": round(price, 2),
+            }
+        )
+        future_entries.append(
+            (future_date, data.region, crop_name, round(price, 2), 0)
+        )  # actual = 0
 
+    # 8. Insert predicted values into the database
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.executemany(
+            """
+            INSERT INTO price (date, region, crop, price, actual)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            future_entries,
+        )
+        conn.commit()
+
+    # 9. Return response
     return {
         "crop": crop_name,
         "region": data.region,
