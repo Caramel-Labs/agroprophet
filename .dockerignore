@@ -9,4 +9,8 @@ __pycache__/
 .git/
 .gitignore
 Dockerfile
+Documentation.pdf
+Presentation.pptx
+image_name.txt
+LICENSE
 README.md
