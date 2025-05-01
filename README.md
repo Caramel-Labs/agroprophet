@@ -4,13 +4,13 @@ Predict the future of your harvest!
 
 ## Project Structure 🌲
 
-AgroProphet's codebase and system architecture is portrayed in the following structure:
+AgroProphet's codebase is portrayed in the following structure:
 
 
 ```sh
 .
 ├── img                            # Images used in documentation
-│   └── swagger.png               # Screenshot of the SwaggerUI interface
+│   └── ...
 ├── models                         # Serialized XGBoost models
 │   ├── Arcadia__Fruit.joblib     # Example model: Arcadia region - Fruit prices
 │   ├── Arcadia__Vegetable.joblib
@@ -38,6 +38,12 @@ AgroProphet's codebase and system architecture is portrayed in the following str
 └── settings.py                    # Configuration file
 
 ```
+
+## System Architecture 🏛️
+
+AgroProphet's architecture is depicted below:
+
+![](img/flowchart.png)
 
 ## Setup (Manual) ⚙️
 
