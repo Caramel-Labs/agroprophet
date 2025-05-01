@@ -11,33 +11,37 @@ AgroProphet's codebase is portrayed in the following structure:
 
 ```sh
 .
-├── img                            # Images used in documentation
-│   └── ...
-├── models                         # Serialized XGBoost models
-│   ├── Arcadia__Fruit.joblib     # Example model: Arcadia region - Fruit prices
-│   ├── Arcadia__Vegetable.joblib
-│   ├── ...                       # (Other similar region/crop models)
-│   └── Zion__Vegetable.joblib
-├── notebooks                      # Jupyter notebooks
-│   └── AgroProphet.ipynb         # Final training and serialization notebook
-├── payloads                       # Pydantic schemas for request validation
-│   ├── __init__.py               # Init file for payloads module
-│   ├── prediction.py             # Schema for price prediction requests
-│   ├── price.py                  # Schema for incoming price data
-│   └── weather.py                # Schema for incoming weather data
-├── routes                         # FastAPI route definitions
-│   ├── data.py                   # Handles new data submission
-│   ├── __init__.py               # Init file for routes module
-│   └── prediction.py             # Handles prediction requests
-├── static                         # Static files served with the API
-│   └── index.html                # Basic HTML UI placeholder or landing page
-├── agroprophet.db                 # SQLite database of the system
-├── Dockerfile                     # Dockerfile
+├── deployment                      # Deployment folder containing the system
+│   ├── models                      # Serialized XGBoost models
+│   │   ├── Arcadia__Fruit.joblib     # Example: Arcadia region - Fruit prices
+│   │   ├── Arcadia__Vegetable.joblib
+│   │   ├── ...                       # (Other similar region/crop models)
+│   │   └── Zion__Vegetable.joblib
+│   ├── payloads                    # Pydantic schemas for request validation
+│   │   ├── __init__.py               # Init file for payloads module
+│   │   ├── prediction.py             # Schema for price prediction requests
+│   │   ├── price.py                  # Schema for incoming price data
+│   │   └── weather.py                # Schema for incoming weather data
+│   ├── routes                      # FastAPI route definitions
+│   │   ├── __init__.py               # Init file for routes module
+│   │   ├── data.py                   # Handles new data submission
+│   │   └── prediction.py             # Handles prediction requests
+│   ├── static                      # Static files served with the API
+│   │   └── index.html                # Basic HTML UI or landing page
+│   ├── agroprophet.db             # SQLite database of the system
+│   ├── Dockerfile                 # Docker image build configuration
+│   ├── main.py                    # FastAPI app entry point
+│   ├── requirements.txt           # List of Python dependencies
+│   └── settings.py                # Configuration file
+├── img                             # Images used in documentation
+│   └── ...                         # Flowchart, screenshot, swagger, etc.
+├── notebooks                       # Jupyter notebooks
+│   └── AgroProphet.ipynb          # Final training and serialization notebook
+├── Documentation.pdf              # Project documentation
+├── image_name.txt                 # Docker image tag/version info
 ├── LICENSE                        # Project license file
-├── main.py                        # FastAPI app entry point
-├── README.md                      # Project overview, setup instructions, and usage guide
-├── requirements.txt               # List of Python dependencies
-└── settings.py                    # Configuration file
+├── Presentation.pptx              # Project presentation slides
+└── README.md                      # Project overview and setup guide
 
 ```
 
