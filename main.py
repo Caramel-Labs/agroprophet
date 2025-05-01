@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes.prediction import router as prediction_router
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
-
+ 
 # ***************************************
 #              APPLICATION
 # ***************************************
