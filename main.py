@@ -1,7 +1,7 @@
 import sqlite3
 from fastapi import FastAPI
 from settings import DB_PATH
-from routes.price import router as data_router
+from routes.data import router as data_router
 from fastapi.middleware.cors import CORSMiddleware
 from routes.prediction import router as prediction_router
 
@@ -17,8 +17,14 @@ app = FastAPI(
 )
 
 # Bind routers to main application
-app.include_router(data_router)
-app.include_router(prediction_router)
+app.include_router(
+    router=data_router,
+    prefix="/api",
+)
+app.include_router(
+    router=prediction_router,
+    prefix="/api",
+)
 
 
 # ***************************************

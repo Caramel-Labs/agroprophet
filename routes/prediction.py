@@ -10,7 +10,7 @@ from payloads.prediction import PricePredictionPayload
 
 # Setup prediction router
 router = APIRouter(
-    prefix="/api/predict",
+    prefix="/predict",
     tags=["Prediction"],
 )
 

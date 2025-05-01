@@ -7,7 +7,7 @@ from payloads.weather import WeatherPayload
 
 # Setup prediction router
 router = APIRouter(
-    prefix="/api/data",
+    prefix="/data",
     tags=["Data"],
 )
 
