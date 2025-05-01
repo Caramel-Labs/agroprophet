@@ -1,5 +1,6 @@
 import os
 import joblib
+import sqlite3
 import numpy as np
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
@@ -11,6 +12,30 @@ app = FastAPI(
     title="AgroProphet",
     description="AgroProphet - Cold Storage Solution.",
 )
+
+# SQLite DB setup
+db_path = "agroprophet.db"
+
+
+def init_db():
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS price (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                region TEXT NOT NULL,
+                crop TEXT NOT NULL,
+                price REAL NOT NULL
+            )
+        """
+        )
+        conn.commit()
+
+
+# Call this once at startup
+init_db()
 
 # Define directory with saved models
 model_dir = "models"
@@ -84,3 +109,26 @@ def predict_prices(data: CommodityInput):
         "type": data.type,
         "predicted_prices_next_4_weeks": y_pred,
     }
+
+
+@app.post("/api/data/prices", tags=["Data Collection"])
+def store_price_data(payload: dict):
+    # Validate required fields
+    try:
+        date = payload["date"]
+        region = payload["region"]
+        crop = payload["crop"]
+        price = payload["priceData"]["price"]
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Missing required fields.")
+
+    # Store in SQLite DB
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO price (date, region, crop, price) VALUES (?, ?, ?, ?)",
+            (date, region, crop, price),
+        )
+        conn.commit()
+
+    return {"message": "Price data saved successfully."}
