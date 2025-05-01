@@ -1,2 +1,3 @@
-# agroprophet
-AgroProphet by Caramel Labs
+# AgroProphet
+
+Work in progress, come back soon!
