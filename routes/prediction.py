@@ -4,9 +4,10 @@ import sqlite3
 import numpy as np
 from fastapi import APIRouter
 from fastapi import HTTPException
-from settings import DB_PATH, MODELS_PATH
+from datetime import datetime, timedelta
 from sklearn.calibration import LabelEncoder
-from payloads.prediction import PricePredictionPayload
+from payloads.prediction import PredictionPayload
+from settings import DB_PATH, MODELS_PATH, FRUITS, VEGETABLES
 
 # Setup prediction router
 router = APIRouter(
@@ -20,28 +21,30 @@ router = APIRouter(
 
 
 @router.post("/")
-def predict_prices(data: PricePredictionPayload):
-    # Insert the new price into the DB
-    with sqlite3.connect(DB_PATH) as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO price (date, region, crop, price) VALUES (?, ?, ?, ?)",
-            (data.date, data.region, data.commodity, data.price),
+def predict_prices(data: PredictionPayload):
+    # 1. Infer crop type
+    crop_name = data.crop.strip()
+    if crop_name in FRUITS:
+        crop_type = "Fruit"
+    elif crop_name in VEGETABLES:
+        crop_type = "Vegetable"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown crop; not categorized as Fruit or Vegetable.",
         )
-        conn.commit()
 
-    # Retrieve the latest 4 weeks of price data (including the new one)
+    # 2. Retrieve last 4 prices
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT price FROM price
+            SELECT date, price FROM price
             WHERE region = ? AND crop = ?
-              AND date <= ?
             ORDER BY date DESC
             LIMIT 4
             """,
-            (data.region, data.commodity, data.date),
+            (data.region, crop_name),
         )
         rows = cursor.fetchall()
 
@@ -51,37 +54,48 @@ def predict_prices(data: PricePredictionPayload):
             detail="Not enough historical data to make a prediction (need at least 4 weeks of price data).",
         )
 
-    # Reverse to get oldest to newest
-    last_4_week_prices = [row[0] for row in reversed(rows)]
+    # 3. Sort and prepare lag values
+    sorted_rows = sorted(rows, key=lambda x: x[0])
+    last_4_week_prices = [row[1] for row in sorted_rows]
+    latest_date = datetime.strptime(sorted_rows[-1][0], "%Y-%m-%d")
 
-    # Load appropriate model
+    # 4. Load model
     model_path = os.path.join(
-        MODELS_PATH, f"{data.region}__{data.type}.joblib".replace(" ", "_")
+        MODELS_PATH, f"{data.region}__{crop_type}.joblib".replace(" ", "_")
     )
 
     if not os.path.exists(model_path):
         raise HTTPException(
-            status_code=404, detail="Model not found for given region and type."
+            status_code=404,
+            detail=f"Model not found for region '{data.region}' and crop type '{crop_type}'.",
         )
 
     model_data = joblib.load(model_path)
     model = model_data["model"]
     encoder: LabelEncoder = model_data["label_encoder"]
 
-    # Encode commodity
+    # 5. Encode crop name
     try:
-        commodity_enc = encoder.transform([data.commodity])[0]
+        crop_enc = encoder.transform([crop_name])[0]
     except ValueError:
-        raise HTTPException(status_code=400, detail="Unknown commodity.")
+        raise HTTPException(status_code=400, detail="Crop not recognized by the model.")
 
-    # Predict
-    X_input = np.array([[commodity_enc] + last_4_week_prices])
+    # 6. Predict
+    X_input = np.array([[crop_enc] + last_4_week_prices])
     y_pred = model.predict(X_input)[0].tolist()
 
+    # 7. Build prediction output with future dates
+    prediction_output = [
+        {
+            "prediction_index": i,
+            "date": (latest_date + timedelta(weeks=i + 1)).strftime("%Y-%m-%d"),
+            "price": round(price, 2),
+        }
+        for i, price in enumerate(y_pred)
+    ]
+
     return {
-        "commodity": data.commodity,
+        "crop": crop_name,
         "region": data.region,
-        "type": data.type,
-        "input_prices": last_4_week_prices,
-        "predicted_prices_next_4_weeks": y_pred,
+        "predictions": prediction_output,
     }
