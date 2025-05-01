@@ -1,12 +1,12 @@
 import sqlite3
 from fastapi import FastAPI
 from settings import DB_PATH
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from routes.data import router as data_router
 from fastapi.middleware.cors import CORSMiddleware
 from routes.prediction import router as prediction_router
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
- 
+
 # ***************************************
 #              APPLICATION
 # ***************************************
@@ -104,6 +104,7 @@ async def read_root():
 
     with open("static/index.html") as f:
         return f.read()
+
 
 # NOTE
 # Other routes can be found in the `routes` folder
