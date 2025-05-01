@@ -2,6 +2,8 @@
 
 Predict the future of your harvest!
 
+![](img/screenshot.png)
+
 ## Project Structure 🌲
 
 AgroProphet's codebase is portrayed in the following structure:
@@ -59,7 +61,7 @@ To run AgroProphet locally on your machine, follow these steps:
 
 ```shell
 git clone https://github.com/Caramel-Labs/agroprophet.git
-cd agroprophet
+cd agroprophet/deployment
 ```
 
 ### 2. Activate Virtual Environment
@@ -154,7 +156,7 @@ If you prefer to build the image yourself from source, use the included Dockerfi
 
 ```bash
 git clone https://github.com/Caramel-Labs/agroprophet.git
-cd agroprophet
+cd agroprophet/deployment
 ```
 
 ### 2. Build the Docker Image
