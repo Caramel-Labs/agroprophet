@@ -1,5 +1,6 @@
 venv/
 env/
+img/
 notebooks/
 __pycache__/
 *.pyc
