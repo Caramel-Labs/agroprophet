@@ -56,14 +56,8 @@ def calculate_rolling_rmse_and_check(conn, date: str, region: str, crop: str):
 
     if rmse > RMSE_THRESHOLD:
         print(f"🚨 RMSE ({rmse:.2f}) for {region}/{crop} exceeds threshold ({RMSE_THRESHOLD}). Retraining needed!")
-        # --- Trigger Retraining Process ---
-        # This part depends on how your retraining is set up.
-        # You might log this, add a task to a queue, or call another function.
-        # This function *does not* perform the retraining itself.
         try:
-            # Replace with your actual retraining trigger call
-            # trigger_retrain_model(region, crop)
-            print(f"Triggering retraining for {region}/{crop}...") # Placeholder log
+            print(f"Triggering retraining for {region}/{crop}...") 
             pass # Add your actual trigger logic here
         except Exception as e:
             print(f"❌ Failed to trigger retraining for {region}/{crop}: {e}")

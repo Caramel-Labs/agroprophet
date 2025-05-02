@@ -139,16 +139,6 @@ def predict_prices(data: PredictionPayload):
             (future_date, data.region, crop_name, cleaned_price, 0)
         )
 
-    # 9. Insert predicted values into the database
-    # Use INSERT OR IGNORE in case a prediction for this date/region/crop already exists
-    # (e.g., if predict is called multiple times for the same future date range)
-    # The UNIQUE constraint on (date, region, crop) in the price table helps prevent duplicates.
-    # If a record *already* exists (maybe a new prediction overwriting an old one?),
-    # you might prefer UPDATE or UPSERT logic here instead of just INSERT OR IGNORE,
-    # but for simplicity, IGNORE is used assuming the newest prediction is the one you want to keep
-    # or that duplicates for the *same* future date won't happen with normal flow.
-    # If you expect overlapping predictions, consider handling the UNIQUE constraint error
-    # or using UPSERT if your SQLite version supports it (>= 3.35.0).
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         try:
