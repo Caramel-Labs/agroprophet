@@ -1,3 +1,5 @@
+# main.py
+
 import sqlite3
 from fastapi import FastAPI
 from settings import DB_PATH
@@ -8,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes.prediction import router as prediction_router
 
 # ***************************************
-#              APPLICATION
+#             APPLICATION
 # ***************************************
 
 
@@ -32,14 +34,15 @@ app.include_router(
 
 
 # ***************************************
-#               DATABASE
+#             DATABASE
 # ***************************************
 
-
 def init_db():
+    """Initializes the database by creating necessary tables."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
-        # Create price table
+
+        # Create price table (added 'actual' column and a unique index)
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS price (
@@ -47,11 +50,14 @@ def init_db():
                 date TEXT NOT NULL,
                 region TEXT NOT NULL,
                 crop TEXT NOT NULL,
-                price REAL NOT NULL
+                price REAL NOT NULL,
+                actual INTEGER DEFAULT 0, -- 1 for actual, 0 for predicted
+                UNIQUE(date, region, crop) -- Ensure only one entry per date, region, crop
             )
-        """
+            """
         )
-        # Create weather table
+
+        # Create weather table (added a unique index)
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS weather (
@@ -60,24 +66,47 @@ def init_db():
                 region TEXT NOT NULL,
                 rainfall REAL,
                 humidity REAL,
-                temp REAL
+                temp REAL,
+                UNIQUE(date, region) -- Ensure only one weather entry per date, region
             )
-        """
+            """
         )
+
+        # --- New table for tracking prediction errors ---
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS prediction_errors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,           -- The date the actual price was recorded (and prediction was made for)
+                region TEXT NOT NULL,
+                crop TEXT NOT NULL,
+                squared_error REAL NOT NULL,  -- (predicted_price - actual_price)^2
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP -- When this error record was created
+            )
+            """
+        )
+
+        # --- Add indexes for faster querying on the new table ---
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_error_date_region_crop ON prediction_errors (date, region, crop);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_error_region_crop ON prediction_errors (region, crop);")
+        # ---------------------------------------------------------
+
         conn.commit()
+    print(f"Database initialized at {DB_PATH}")
 
 
+# Initialize the database on startup
 init_db()
 
 
 # ***************************************
-#              CORS CONFIG
+#             CORS CONFIG
 # ***************************************
 
 
 # Define allowed origins for CORS
 origins = [
-    "*",
+    "*", # Consider restricting this in production
     "http://localhost",
     "http://localhost:3000",
     "http://localhost:3001",
@@ -95,15 +124,18 @@ app.add_middleware(
 
 
 # ***************************************
-#               ROUTES
+#              ROUTES
 # ***************************************
 
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
-
-    with open("static/index.html") as f:
-        return f.read()
+    """Serves the main HTML page."""
+    try:
+        with open("static/index.html", "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse("<h1>Index.html not found</h1><p>Make sure static/index.html exists.</p>", status_code=404)
 
 
 # NOTE

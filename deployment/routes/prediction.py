@@ -1,3 +1,5 @@
+# routes/prediction.py
+
 import os
 import joblib
 import sqlite3
@@ -5,9 +7,9 @@ import numpy as np
 from fastapi import APIRouter
 from fastapi import HTTPException
 from datetime import datetime, timedelta
-from sklearn.calibration import LabelEncoder
-from payloads.prediction import PredictionPayload
-from settings import DB_PATH, MODELS_PATH, FRUITS, VEGETABLES
+from sklearn.calibration import LabelEncoder # Assuming LabelEncoder is used
+from payloads.prediction import PredictionPayload # Assuming this Pydantic model exists
+from settings import DB_PATH, MODELS_PATH, FRUITS, VEGETABLES # Import necessary settings
 
 # Setup prediction router
 router = APIRouter(
@@ -22,8 +24,12 @@ router = APIRouter(
 
 @router.post("")
 def predict_prices(data: PredictionPayload):
-    # 1. Infer crop type
+    """
+    Generates price predictions for a given crop and region based on historical data.
+    """
+    # 1. Infer crop type (needed to load the correct model)
     crop_name = data.crop.strip()
+    crop_type = None
     if crop_name in FRUITS:
         crop_type = "Fruit"
     elif crop_name in VEGETABLES:
@@ -31,16 +37,17 @@ def predict_prices(data: PredictionPayload):
     else:
         raise HTTPException(
             status_code=400,
-            detail="Unknown crop; not categorized as Fruit or Vegetable.",
+            detail=f"Unknown crop '{crop_name}'; not categorized as Fruit or Vegetable. Please add it to settings.py.",
         )
 
-    # 2. Retrieve last 4 actual prices
+    # 2. Retrieve last 4 *actual* prices for the specific region and crop
+    # Ensure you are only getting actual data (actual = 1)
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
             SELECT date, price FROM price
-            WHERE region = ? AND crop = ? AND actual = 1
+            WHERE region = ? AND crop = ? AND actual = 1 -- Crucial: only fetch actual data
             ORDER BY date DESC
             LIMIT 4
             """,
@@ -48,71 +55,121 @@ def predict_prices(data: PredictionPayload):
         )
         rows = cursor.fetchall()
 
+    # 3. Check if enough historical data is available
     if len(rows) < 4:
         raise HTTPException(
             status_code=400,
-            detail="Not enough historical data to make a prediction (need at least 4 weeks of actual price data).",
+            detail=f"Not enough historical data to make a prediction for {crop_name} in {data.region} (need at least 4 weeks of *actual* price data). Found {len(rows)}.",
         )
 
-    # 3. Sort and prepare lag values
+    # 4. Sort data by date and prepare lag values
+    # The data is fetched DESC, so sort ASC for chronological order
     sorted_rows = sorted(rows, key=lambda x: x[0])
     last_4_week_prices = [row[1] for row in sorted_rows]
-    latest_date = datetime.strptime(sorted_rows[-1][0], "%Y-%m-%d")
+    latest_date_str = sorted_rows[-1][0]
+    latest_date = datetime.strptime(latest_date_str, "%Y-%m-%d")
 
-    # 4. Load model
-    model_path = os.path.join(
-        MODELS_PATH, f"{data.region}__{crop_type}.joblib".replace(" ", "_")
-    )
+    print(f"📈 Using last 4 actual prices for {crop_name} in {data.region} ending {latest_date_str}: {last_4_week_prices}")
+
+
+    # 5. Load the specific model for the region and crop type
+    # Model names are expected in the format Region__CropType.joblib
+    model_filename = f"{data.region}__{crop_type}.joblib".replace(" ", "_")
+    model_path = os.path.join(MODELS_PATH, model_filename)
 
     if not os.path.exists(model_path):
         raise HTTPException(
             status_code=404,
-            detail=f"Model not found for region '{data.region}' and crop type '{crop_type}'.",
+            detail=f"Model file '{model_filename}' not found for region '{data.region}' and crop type '{crop_type}'.",
         )
 
-    model_data = joblib.load(model_path)
-    model = model_data["model"]
-    encoder: LabelEncoder = model_data["label_encoder"]
+    try:
+        model_data = joblib.load(model_path)
+        model = model_data["model"]
+        # Assuming your saved model data includes the LabelEncoder used during training
+        encoder: LabelEncoder = model_data["label_encoder"]
+        print(f"✅ Successfully loaded model: {model_filename}")
+    except Exception as e:
+         raise HTTPException(
+            status_code=500,
+            detail=f"Error loading or accessing model components from {model_filename}: {e}",
+        )
 
-    # 5. Encode crop name
+
+    # 6. Encode the crop name using the model's encoder
     try:
         crop_enc = encoder.transform([crop_name])[0]
+        print(f"Crop '{crop_name}' encoded to {crop_enc}")
     except ValueError:
-        raise HTTPException(status_code=400, detail="Crop not recognized by the model.")
+        raise HTTPException(status_code=400, detail=f"Crop '{crop_name}' not recognized by the loaded model's encoder. It might not have been included in the training data for this model.")
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Error during crop encoding: {e}")
 
-    # 6. Predict
+
+    # 7. Prepare input for the model and make predictions
+    # The input features are the encoded crop followed by the 4 lag prices
     X_input = np.array([[crop_enc] + last_4_week_prices])
-    y_pred = model.predict(X_input)[0].tolist()
+    try:
+        # Model is expected to predict a list/array of future prices
+        y_pred = model.predict(X_input)[0].tolist() # Assuming predict returns [prediction1, prediction2, ...]
+        print(f"🔮 Model predicted raw prices: {y_pred}")
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Error during model prediction: {e}")
 
-    # 7. Build prediction output with future dates
+
+    # 8. Build prediction output with future dates and prepare database entries
     prediction_output = []
-    future_entries = []
+    future_db_entries = [] # List to hold tuples for bulk insertion
     for i, price in enumerate(y_pred):
+        # Calculate the date for each future week
         future_date = (latest_date + timedelta(weeks=i + 1)).strftime("%Y-%m-%d")
+        # Ensure price is not negative (optional, based on domain knowledge)
+        cleaned_price = max(0.0, round(price, 2))
+
         prediction_output.append(
             {
                 "prediction_index": i,
                 "date": future_date,
-                "price": round(price, 2),
+                "price": cleaned_price,
             }
         )
-        future_entries.append(
-            (future_date, data.region, crop_name, round(price, 2), 0)
-        )  # actual = 0
+        # Prepare data for insertion into the 'price' table
+        # Use actual=0 to mark these as predictions
+        future_db_entries.append(
+            (future_date, data.region, crop_name, cleaned_price, 0)
+        )
 
-    # 8. Insert predicted values into the database
+    # 9. Insert predicted values into the database
+    # Use INSERT OR IGNORE in case a prediction for this date/region/crop already exists
+    # (e.g., if predict is called multiple times for the same future date range)
+    # The UNIQUE constraint on (date, region, crop) in the price table helps prevent duplicates.
+    # If a record *already* exists (maybe a new prediction overwriting an old one?),
+    # you might prefer UPDATE or UPSERT logic here instead of just INSERT OR IGNORE,
+    # but for simplicity, IGNORE is used assuming the newest prediction is the one you want to keep
+    # or that duplicates for the *same* future date won't happen with normal flow.
+    # If you expect overlapping predictions, consider handling the UNIQUE constraint error
+    # or using UPSERT if your SQLite version supports it (>= 3.35.0).
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
-        cursor.executemany(
-            """
-            INSERT INTO price (date, region, crop, price, actual)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            future_entries,
-        )
-        conn.commit()
+        try:
+            cursor.executemany(
+                """
+                INSERT OR IGNORE INTO price (date, region, crop, price, actual)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                future_db_entries,
+            )
+            conn.commit()
+            print(f"✅ Inserted {cursor.rowcount} new predicted price records.")
+            # Note: rowcount only shows *new* inserts due to INSERT OR IGNORE
+        except Exception as e:
+             # Rollback in case of any error during insertion
+            conn.rollback()
+            print(f"❌ Error inserting predicted prices: {e}")
+            raise HTTPException(status_code=500, detail=f"Database error while storing predictions: {e}")
 
-    # 9. Return response
+
+    # 10. Return the prediction output
     return {
         "crop": crop_name,
         "region": data.region,
