@@ -1,16 +1,21 @@
 # routes/data.py
 
 import sqlite3
-import math # Need for sqrt
-from settings import DB_PATH, RMSE_THRESHOLD, MIN_ERROR_POINTS # Import new settings
-from fastapi import APIRouter
-from fastapi import HTTPException
-from payloads.price import PricePayload # Assuming this Pydantic model exists
-from payloads.weather import WeatherPayload # Assuming this Pydantic model exists
-from datetime import datetime, timedelta # Need for date calculations
+import math
+import os
+import joblib
+import numpy as np
+import pandas as pd 
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from payloads.price import PricePayload
+from payloads.weather import WeatherPayload
+from settings import DB_PATH, RMSE_THRESHOLD, MIN_ERROR_POINTS, MODELS_PATH, FRUITS, VEGETABLES 
+from datetime import datetime, timedelta
 
-# Placeholder Import for Retraining Trigger (replace with your actual module)
-# from your_retraining_module import trigger_retrain_model
+from sklearn.preprocessing import LabelEncoder
+from xgboost import XGBRegressor
+from sklearn.multioutput import MultiOutputRegressor
+
 
 # Setup data router
 router = APIRouter(
@@ -22,21 +27,217 @@ router = APIRouter(
 #         HELPER FUNCTIONS
 # --------------------------------
 
-def calculate_rolling_rmse_and_check(conn, date: str, region: str, crop: str):
+def determine_crop_type(crop_name: str):
+    """Infers the crop type (Fruit or Vegetable) from the crop name."""
+    if crop_name in FRUITS:
+        return "Fruit"
+    elif crop_name in VEGETABLES:
+        return "Vegetable"
+    else:
+        # This case should ideally be caught earlier, but good for robustness
+        print(f"Warning: Unknown crop '{crop_name}' encountered during retraining.")
+        return None # Or raise an error if unknown crops shouldn't exist
+
+
+def prepare_retraining_data(db_data: list, region: str, crop: str, crop_type: str, loaded_encoder: LabelEncoder):
+    """
+    Prepares data fetched from the database for model retraining,
+    replicating the logic of the original prepare_dataset function.
+
+    Args:
+        db_data: List of tuples (date, price) fetched from the database.
+                 Assumes data is already filtered for the specific region and crop.
+        region: The region name.
+        crop: The specific crop name (e.g., 'Apple').
+        crop_type: The type of crop (e.g., 'Fruit').
+        loaded_encoder: The pre-fitted LabelEncoder for this crop type.
+
+    Returns:
+        Tuple (X, y) of numpy arrays ready for model training, or (None, None) if insufficient data.
+        X: Features (commodity_enc + lags)
+        y: Targets (leads)
+    """
+    if not db_data:
+        print("No data provided for retraining preparation.")
+        return None, None
+
+    # Convert list of tuples to DataFrame, mimicking original column names
+    # Add dummy columns for 'Region' and 'Type' as they are used for filtering in original prepare_dataset
+    # and 'Commodity' to match the encoder's expected input.
+    df = pd.DataFrame(db_data, columns=['Date', 'Price per Unit (Silver Drachma/kg)'])
+    df['Region'] = region
+    df['Type'] = crop_type
+    df['Commodity'] = crop # Add the specific crop name
+
+    # Replicate the data preparation steps from the original prepare_dataset
+    df = (
+        df.assign(Date=lambda d: pd.to_datetime(d['Date']))
+          .sort_values(['Commodity','Date']) # Sort by commodity and date as in original
+    )
+
+    # Use the loaded encoder to transform the 'Commodity' column
+    # The encoder should already be fitted on all commodities for this crop type
+    try:
+        df['commodity_enc'] = loaded_encoder.transform(df['Commodity'])
+    except ValueError as e:
+        print(f"Error transforming commodity '{crop}' with loaded encoder: {e}. This crop might not have been in the original training data.")
+        return None, None # Cannot proceed if encoding fails
+    except Exception as e:
+         print(f"Unexpected error during commodity encoding: {e}")
+         return None, None
+
+
+    # Build lags (1-4) and leads (1-4)
+    # Use the exact column name from the original script for price
+    price_col = 'Price per Unit (Silver Drachma/kg)'
+    for lag in [1,2,3,4]:
+        # Groupby 'Commodity' before shifting, as in original
+        df[f'lag_{lag}'] = df.groupby('Commodity')[price_col].shift(lag)
+    for lead in [1,2,3,4]:
+         # Groupby 'Commodity' before shifting, as in original
+        df[f'lead_{lead}'] = df.groupby('Commodity')[price_col].shift(-lead)
+
+
+    # Define columns used for dropping NaNs
+    lag_cols  = [f'lag_{l}'  for l in [1,2,3,4]]
+    lead_cols = [f'lead_{l}' for l in [1,2,3,4]]
+    # Drop rows with NaNs in feature/target columns, including the encoded commodity
+    df_clean = df.dropna(subset=lag_cols + lead_cols + ['commodity_enc'])
+
+    # Check if enough data remains after dropping NaNs
+    if df_clean.shape[0] < MIN_ERROR_POINTS: # Use MIN_ERROR_POINTS or a separate retraining threshold
+         print(f"Insufficient data ({df_clean.shape[0]} rows) after preparing features/targets for {region}/{crop}. Need at least {MIN_ERROR_POINTS} training samples.")
+         return None, None
+
+
+    # Separate features (X) and targets (y)
+    # Features: encoded commodity + lags
+    X = df_clean[['commodity_enc'] + lag_cols]
+    # Targets: leads
+    y = df_clean[lead_cols]
+
+    print(f"Prepared training data for {region}/{crop}: X shape {X.shape}, y shape {y.shape}")
+
+    return X.to_numpy(), y.to_numpy() # Return as numpy arrays
+
+
+def perform_actual_retraining(region: str, crop: str):
+    """
+    Background task function to perform the actual model retraining
+    for a specific region and crop.
+    """
+    print(f"🏋️‍♂️ Starting retraining for model: {region} / {crop}")
+
+    # Determine crop type to load the correct model file
+    crop_type = determine_crop_type(crop)
+    if crop_type is None:
+        print(f"❌ Retraining failed for {region}/{crop}: Could not determine crop type.")
+        return
+
+    model_filename = f"{region}__{crop_type}.joblib".replace(" ", "_")
+    model_path = os.path.join(MODELS_PATH, model_filename)
+
+    if not os.path.exists(model_path):
+        print(f"❌ Retraining failed for {region}/{crop}: Model file not found at {model_path}.")
+        return
+
+    try:
+        # --- 1. Load Existing Model and Encoder ---
+        # We need the existing encoder to correctly encode the commodity during data prep
+        print(f"Loading existing model data from {model_path}...")
+        model_data = joblib.load(model_path)
+        existing_model = model_data["model"] # We load the model just to confirm structure, but will train a new one
+        loaded_encoder: LabelEncoder = model_data["label_encoder"]
+        print("✅ Existing model data and encoder loaded.")
+
+    except Exception as e:
+        print(f"❌ Error loading existing model data or encoder for {region}/{crop}: {e}")
+        return
+
+    try:
+        # --- 2. Fetch All Actual Data for Retraining ---
+        # Fetch all actual price data for this specific region and crop from the database.
+        # This includes historical data imported from CSV and new data collected via the API.
+        print(f"Fetching all actual price data for {region}/{crop} from database...")
+        with sqlite3.connect(DB_PATH) as conn:
+             cursor = conn.cursor()
+             cursor.execute(
+                 """
+                 SELECT date, price FROM price
+                 WHERE region = ? AND crop = ? AND actual = 1
+                 ORDER BY date ASC
+                 """,
+                 (region, crop),
+             )
+             actual_price_data = cursor.fetchall()
+
+        if not actual_price_data:
+             print(f"⚠️ No actual data found for {region}/{crop} in the database. Cannot retrain.")
+             return
+
+        print(f"Fetched {len(actual_price_data)} actual data points.")
+
+        # --- 3. Prepare Data for Training ---
+        # Use the helper function to prepare features (X) and targets (y)
+        # using the fetched data and the loaded encoder.
+        X_train, y_train = prepare_retraining_data(actual_price_data, region, crop, crop_type, loaded_encoder)
+
+        if X_train is None or y_train is None:
+            # prepare_retraining_data will print specific reasons for failure
+            print(f"❌ Data preparation failed or insufficient data for retraining {region}/{crop}. Skipping retraining.")
+            return
+
+        # --- 4. Train the Model ---
+        # Instantiate the same model architecture and parameters as in original training
+        print(f"Training {region}/{crop} model with {X_train.shape[0]} samples...")
+        try:
+            # Re-instantiate the model with the same parameters
+            model = MultiOutputRegressor(
+                XGBRegressor(objective='reg:squarederror', n_estimators=1000)
+            )
+            model.fit(X_train, y_train) # Fit the model on the prepared data
+
+            print(f"✅ Model training complete for {region}/{crop}.")
+
+        except Exception as e:
+            print(f"❌ Error during model training for {region}/{crop}: {e}")
+            return
+
+
+        # --- 5. Save the New Model ---
+        # Save the newly trained model and the *loaded* label encoder, overwriting the old file.
+        try:
+            # Ensure the models directory exists (should be done by init_db or deployment setup, but good check)
+            os.makedirs(MODELS_PATH, exist_ok=True)
+
+            # Save the updated model and the *same* label encoder together
+            joblib.dump({'model': model, 'label_encoder': loaded_encoder}, model_path)
+
+            print(f"✅ Successfully saved updated model: {model_path}")
+
+        except Exception as e:
+            print(f"❌ Error saving the retrained model for {region}/{crop}: {e}")
+
+
+    except Exception as e:
+        # Catch any other unexpected errors during the background task
+        print(f"❌ An unexpected error occurred during retraining for {region}/{crop}: {e}")
+
+
+def calculate_rolling_rmse_and_check(conn, date: str, region: str, crop: str, background_tasks: BackgroundTasks):
     """
     Calculates the 3-month rolling RMSE for a specific region/crop
-    ending on the given date and triggers retraining if the threshold is exceeded.
+    and adds a retraining task if the threshold is exceeded.
     """
     cursor = conn.cursor()
     current_date = datetime.strptime(date, "%Y-%m-%d")
-    # Define the rolling window: from 3 months ago up to (and including) the current date
     three_months_ago = current_date - timedelta(weeks=13) # Approx 3 months
 
     cursor.execute(
         """
         SELECT squared_error FROM prediction_errors
         WHERE region = ? AND crop = ? AND date >= ? AND date <= ?
-        ORDER BY date DESC -- Ordering by date is good for clarity but not strictly needed for sum/count
+        ORDER BY date DESC
         """,
         (region, crop, three_months_ago.strftime("%Y-%m-%d"), date),
     )
@@ -55,13 +256,11 @@ def calculate_rolling_rmse_and_check(conn, date: str, region: str, crop: str):
     print(f"📊 Rolling RMSE for {region}/{crop} (last {num_error_points} points ending {date}): {rmse:.2f}")
 
     if rmse > RMSE_THRESHOLD:
-        print(f"🚨 RMSE ({rmse:.2f}) for {region}/{crop} exceeds threshold ({RMSE_THRESHOLD}). Retraining needed!")
-        try:
-            print(f"Triggering retraining for {region}/{crop}...") 
-            pass # Add your actual trigger logic here
-        except Exception as e:
-            print(f"❌ Failed to trigger retraining for {region}/{crop}: {e}")
-        # ----------------------------------
+        print(f"🚨 RMSE ({rmse:.2f}) for {region}/{crop} exceeds threshold ({RMSE_THRESHOLD}). Scheduling retraining!")
+        # --- Add the retraining task to be run in the background ---
+        # Pass region and crop name to the background task
+        background_tasks.add_task(perform_actual_retraining, region, crop)
+        # -----------------------------------------------------------
     else:
          print(f"✅ Rolling RMSE ({rmse:.2f}) for {region}/{crop} is within threshold.")
 
@@ -73,12 +272,13 @@ def calculate_rolling_rmse_and_check(conn, date: str, region: str, crop: str):
 #             ROUTES
 # --------------------------------
 
-
+# Add BackgroundTasks as a parameter to the route handler
 @router.post("/prices", tags=["Price"])
-def store_price_data(payload: PricePayload):
+async def store_price_data(payload: PricePayload, background_tasks: BackgroundTasks):
     """
     Stores or updates price data. If an actual price replaces a prediction,
-    calculates and logs the squared error and checks rolling RMSE.
+    calculates and logs the squared error and checks rolling RMSE,
+    scheduling retraining in the background if needed.
     """
     try:
         date = payload.date
@@ -92,7 +292,6 @@ def store_price_data(payload: PricePayload):
         cursor = conn.cursor()
 
         # Check if a record already exists for the same date, region, and crop
-        # We select 'actual' and 'price' (which would be the predicted price if actual=0)
         cursor.execute(
             """
             SELECT id, price, actual FROM price
@@ -154,8 +353,9 @@ def store_price_data(payload: PricePayload):
                 )
                 print(f"✅ Price record updated to actual.")
 
-                # --- Call the RMSE check function after logging error and updating price ---
-                calculate_rolling_rmse_and_check(conn, date, region, crop)
+                # --- Call the RMSE check function and pass BackgroundTasks ---
+                # This function will add perform_actual_retraining to background_tasks if needed
+                calculate_rolling_rmse_and_check(conn, date, region, crop, background_tasks)
                 # ---------------------------------------------------------------------------
 
             else:
