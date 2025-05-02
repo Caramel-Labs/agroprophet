@@ -2,10 +2,6 @@ import os
 
 # Database path
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(BASE_DIR, "database", "mydatabase.db") # Adjust path as needed
-
-# Models path
-MODELS_PATH = os.path.join(BASE_DIR, "models") # Adjust path as needed
 
 
 # --- Settings for RMSE Tracking ---

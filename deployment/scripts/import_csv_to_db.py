@@ -6,7 +6,6 @@ import os
 import sys
 
 # Add the project root directory to the system path to import settings
-# Adjust '../' if settings.py is located differently relative to this script
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
@@ -14,16 +13,30 @@ if PROJECT_ROOT not in sys.path:
 try:
     from settings import DB_PATH
     print(f"Database path loaded from settings: {DB_PATH}")
+    
+    # Show the current working directory to help with debugging
+    print(f"Current working directory: {os.getcwd()}")
+    print(f"Project root directory: {PROJECT_ROOT}")
+    print(f"Database path exists: {os.path.exists(DB_PATH)}")
+    
+    # Try to check if the database file exists
+    if not os.path.exists(DB_PATH):
+        print(f"Database file does not exist at {DB_PATH}")
+        db_dir = os.path.dirname(DB_PATH)
+        if not os.path.exists(db_dir):
+            print(f"Database directory does not exist. Creating: {db_dir}")
+            os.makedirs(db_dir, exist_ok=True)
 except ImportError:
     print("Error: Could not import DB_PATH from settings. Make sure settings.py is accessible.")
-    sys.exit(1) # Exit if settings cannot be loaded
+    sys.exit(1)
 
 # --- Configuration ---
-# Path to your historical price data CSV file
-CSV_FILE_PATH = '../dataset/train_data.csv' # <--- Adjust this path if your CSV is elsewhere
+# Path to your historical price data CSV file - use absolute path for reliability
+CSV_FILE_PATH = os.path.join(PROJECT_ROOT, 'dataset', 'train_data.csv')
+print(f"CSV path: {CSV_FILE_PATH}")
+print(f"CSV file exists: {os.path.exists(CSV_FILE_PATH)}")
 
 # Define the expected column names in your CSV file
-# These should match the data you want to insert into the 'price' table
 CSV_COLUMNS = ['Date', 'Region', 'Commodity', 'Price per Unit (Silver Drachma/kg)']
 
 # Define the mapping between CSV columns and DB columns
@@ -34,6 +47,43 @@ CSV_TO_DB_MAPPING = {
     'Price per Unit (Silver Drachma/kg)': 'price'
 }
 # --- End Configuration ---
+
+def create_price_table_if_not_exists(db_path: str):
+    """
+    Creates the 'price' table in the database if it doesn't already exist.
+    """
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Check if the table exists
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='price'")
+            if not cursor.fetchone():
+                print("'price' table does not exist. Creating it now...")
+                
+                # Create the price table with appropriate schema
+                cursor.execute('''
+                CREATE TABLE price (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date TEXT NOT NULL,
+                    region TEXT NOT NULL,
+                    crop TEXT NOT NULL,
+                    price REAL NOT NULL,
+                    actual INTEGER DEFAULT 0,
+                    UNIQUE(date, region, crop)
+                )
+                ''')
+                
+                conn.commit()
+                print("'price' table created successfully.")
+            else:
+                print("'price' table already exists in the database.")
+                
+    except sqlite3.Error as e:
+        print(f"Database error while checking/creating table: {e}")
+        return False
+    
+    return True
 
 def import_price_data_from_csv(csv_path: str, db_path: str):
     """
@@ -49,6 +99,11 @@ def import_price_data_from_csv(csv_path: str, db_path: str):
     if db_dir and not os.path.exists(db_dir):
         os.makedirs(db_dir, exist_ok=True)
         print(f"Created database directory: {db_dir}")
+    
+    # Create the price table if it doesn't exist
+    if not create_price_table_if_not_exists(db_path):
+        print("Failed to ensure 'price' table exists. Aborting import.")
+        return
 
     try:
         print(f"Reading data from '{csv_path}'...")
