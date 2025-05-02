@@ -20,7 +20,7 @@ router = APIRouter(
 # --------------------------------
 
 
-@router.post("/")
+@router.post("")
 def predict_prices(data: PredictionPayload):
     # 1. Infer crop type
     crop_name = data.crop.strip()
