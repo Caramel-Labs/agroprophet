@@ -1,0 +1,145 @@
+openapi: 3.0.3
+info:
+  title: Crop Price Prediction API
+  version: 1.0.0
+  description: API to predict crop prices and accept new data entries for weather and price data.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+  /api/predict:
+    post:
+      summary: Predict future prices for a given crop and region
+      requestBody:
+        description: Crop and region to predict prices for
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                crop:
+                  type: string
+                  example: "Cantaloupe"
+                region:
+                  type: string
+                  example: "Valhalla"
+              required:
+                - crop
+                - region
+      responses:
+        '200':
+          description: Price predictions for the specified crop and region
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  crop:
+                    type: string
+                  region:
+                    type: string
+                  predictions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        prediction_index:
+                          type: integer
+                          example: 0
+                        date:
+                          type: string
+                          format: date
+                          example: "2025-04-18"
+                        price:
+                          type: number
+                          format: float
+                          example: 85.2
+        '400':
+          description: Missing required fields or invalid crop/region
+        '422':
+          description: Invalid request format
+
+  /api/data/weather:
+    post:
+      summary: Submit new weather data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  example: "2025-04-16"
+                region:
+                  type: string
+                  example: "Valhalla"
+                weatherData:
+                  type: object
+                  properties:
+                    rainfall:
+                      type: number
+                      nullable: true
+                      example: 5.2
+                    humidity:
+                      type: number
+                      nullable: true
+                      example: 78.3
+                    temp:
+                      type: number
+                      nullable: true
+                      example: 29.4
+              required:
+                - date
+                - region
+                - weatherData
+      responses:
+        '200':
+          description: Weather data stored successfully
+        '400':
+          description: Missing required fields
+        '422':
+          description: Invalid JSON schema
+
+  /api/data/prices:
+    post:
+      summary: Submit new price data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date
+                  example: "2025-04-16"
+                crop:
+                  type: string
+                  example: "Cantaloupe"
+                region:
+                  type: string
+                  example: "Valhalla"
+                priceData:
+                  type: object
+                  properties:
+                    price:
+                      type: number
+                      example: 86.4
+              required:
+                - crop
+                - region
+                - priceData
+      responses:
+        '200':
+          description: Price data stored successfully
+        '400':
+          description: Missing required fields
+        '422':
+          description: Invalid JSON schema
